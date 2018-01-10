@@ -15,7 +15,7 @@ const Settings = require('./modules/settings');
 
 import configureReduxStore from './modules/core/store';
 import { quitApp } from './modules/core/ui/actions';
-import { setLanguageOnMain, toggleSwarm } from './modules/core/settings/actions';
+import { handleNodeSync, setLanguageOnMain, toggleSwarm } from './modules/core/settings/actions';
 import { SwarmState } from './modules/core/settings/reducer';
 import swarmNode from './modules/swarmNode.js';
 
@@ -33,7 +33,6 @@ require('./modules/ipcCommunicator.js');
 const appMenu = require('./modules/menuItems');
 const ipcProviderBackend = require('./modules/ipc/ipcProviderBackend.js');
 const ethereumNode = require('./modules/ethereumNode.js');
-const nodeSync = require('./modules/nodeSync.js');
 
 // Define global vars; The preloader makes some globals available to the client.
 global.webviews = [];
@@ -117,7 +116,7 @@ app.on('before-quit', async (event) => {
 
 
 let mainWindow;
-let splashWindow;
+// let splashWindow;
 
 // This method will be called when Electron has done everything
 // initialization and ready for creating browser windows.
@@ -169,7 +168,8 @@ async function onReady() {
 
     checkTimeSync();
 
-    splashWindow ? splashWindow.on('ready', kickStart) : kickStart();
+    kickStart();
+    // splashWindow ? splashWindow.on('ready', kickStart) : kickStart();
 }
 
 function enableSwarmProtocol() {
@@ -210,7 +210,7 @@ function createCoreWindows() {
     // Delegating events to save window bounds on windowStateKeeper
     global.defaultWindow.manage(mainWindow.window);
 
-    if (!Settings.inAutoTestMode) { splashWindow = Windows.create('splash'); }
+    // if (!Settings.inAutoTestMode) { splashWindow = Windows.create('splash'); }
 }
 
 function checkTimeSync() {
@@ -235,9 +235,14 @@ function checkTimeSync() {
 }
 
 async function kickStart() {
+    await startMainWindow();
+
     initializeKickStartListeners();
+
     checkForLegacyChain();
+
     await ClientBinaryManager.init();
+
     await ethereumNode.init();
 
     if (Settings.enableSwarmOnStart) { store.dispatch(toggleSwarm()); }
@@ -248,12 +253,10 @@ async function kickStart() {
     // Update menu, to show node switching possibilities
     appMenu();
 
-    await handleOnboarding();
+    // await handleOnboarding();
 
-    if (splashWindow) { splashWindow.show(); }
-    if (!Settings.inAutoTestMode) { await handleNodeSync(); }
-
-    await startMainWindow();
+    // if (splashWindow) { splashWindow.show(); }
+    if (!Settings.inAutoTestMode) { store.dispatch(handleNodeSync()); }
 }
 
 function checkForLegacyChain() {
@@ -331,34 +334,9 @@ async function handleOnboarding() {
                 resolve();
             });
 
-            if (splashWindow) { splashWindow.hide(); }
+            // if (splashWindow) { splashWindow.hide(); }
         });
     }
-}
-
-function handleNodeSync() {
-    return new Q((resolve, reject) => {
-        nodeSync.on('nodeSyncing', (result) => {
-            Windows.broadcast('uiAction_nodeSyncStatus', 'inProgress', result);
-        });
-
-        nodeSync.on('stopped', () => {
-            Windows.broadcast('uiAction_nodeSyncStatus', 'stopped');
-        });
-
-        nodeSync.on('error', (err) => {
-            log.error('Error syncing node', err);
-
-            reject(err);
-        });
-
-        nodeSync.on('finished', () => {
-            nodeSync.removeAllListeners('error');
-            nodeSync.removeAllListeners('finished');
-
-            resolve();
-        });
-    });
 }
 
 function startMainWindow() {
@@ -369,7 +347,7 @@ function startMainWindow() {
 
 function initializeMainWindowListeners() {
     mainWindow.on('ready', () => {
-        if (splashWindow) { splashWindow.close(); }
+        // if (splashWindow) { splashWindow.close(); }
         mainWindow.show();
     });
 
